@@ -23,6 +23,13 @@ pipeline {
                     def envName = 'dev'
                     def issuers = loadIssuersConfig(envName)
                     echo "Found ${issuers.size()} issuers for ${envName}: ${issuers}"
+
+                    for (issuer in issuers) {
+                        def path = "cloudformation/backoffice-issuer-config/${issuer}-backoffice-template.yml"
+                        if (fileExists(path)) {
+                            echo "Creating ${issuer}"
+                        }
+                    }
                }
             }
         }

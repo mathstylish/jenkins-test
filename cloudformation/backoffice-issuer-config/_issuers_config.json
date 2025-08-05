@@ -1,0 +1,19 @@
+{
+    "enabled_issuers": {
+        "dev": [
+            "ifood",
+            "issuer_pos",
+            "deltaglobal"
+        ],
+        "hml": [
+            "ifood",
+            "issuer_pos"
+        ],
+        "prod": [
+            "ifood",
+            "issuer_pos",
+            "deltaglobal",
+            "emaisbank"
+        ]
+    }
+}

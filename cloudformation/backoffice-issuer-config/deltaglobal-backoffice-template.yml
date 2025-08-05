@@ -1,0 +1,259 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Delta Global Backoffice Stack
+
+Parameters:
+  envName:
+    Default: dev
+    Type: String
+    AllowedValues: [dev, homolog, prod]
+  AuthName:
+    Type: String
+    Description: Unique Auth Name for Cognito Resources
+    Default: backoffice-deltaglobal
+  issuer:
+    Type: String
+    Description: Issuer of the token
+    Default: deltaglobal
+
+Mappings:
+  Environments:
+    dev:
+      GpPrincipalEntityType: devbackoffice::User
+      GpEntityType: devbackoffice::UserGroup
+      NewUserEmailSubject: Bem vindo ao Backoffice Paysmart de Desenvolvimento!
+      NewUserEmailMessage: Bem vindo ao Backoffice Paysmart de Desenvolvimento!<br>Acesse em https://backoffice-deltaglobal.dev.paysmart.com.br, através do seu e-mail {username} e sua senha temporária {####}<br>Instruções de Login e Configuração MFA em https://paysmart-team.atlassian.net/wiki/spaces/DEV/pages/3427794996/Login+do+BackOffice+com+Multi+Factor+Authentication+-+Backoffice
+      LogLevel: DEBUG
+    homolog:
+      GpPrincipalEntityType: homologbackoffice::User
+      GpEntityType: homologbackoffice::UserGroup
+      NewUserEmailSubject: Bem vindo ao Backoffice Paysmart de Homologação!
+      NewUserEmailMessage: Bem vindo ao Backoffice Paysmart de Homologação!<br>Acesse em https://backoffice-deltaglobal.hml.paysmart.com.br, através do seu e-mail {username} e sua senha temporária {####}<br>Instruções de Login e Configuração MFA em https://paysmart-team.atlassian.net/wiki/spaces/DEV/pages/3427794996/Login+do+BackOffice+com+Multi+Factor+Authentication+-+Backoffice
+      LogLevel: DEBUG
+    prod:
+      GpPrincipalEntityType: prodbackoffice::User
+      GpEntityType: prodbackoffice::UserGroup
+      NewUserEmailSubject: Bem vindo ao Backoffice Paysmart!
+      NewUserEmailMessage: Bem vindo ao Backoffice Paysmart!<br>Acesse em https://backoffice-deltaglobal.paysmart.com.br, através do seu e-mail {username} e sua senha temporária {####}<br>Instruções de Login e Configuração MFA em https://paysmart-team.atlassian.net/wiki/spaces/DEV/pages/3427794996/Login+do+BackOffice+com+Multi+Factor+Authentication+-+Backoffice
+      LogLevel: DEBUG
+
+Resources:
+  # Create operations table
+  OperationTable:
+    Type: 'AWS::DynamoDB::Table'
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub 'backoffice_operations_${issuer}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: 'operationId'
+          AttributeType: 'S'
+        - AttributeName: 'type'
+          AttributeType: 'S'
+        - AttributeName: 'SK'
+          AttributeType: 'S'
+        - AttributeName: 'status'
+          AttributeType: 'S'
+        - AttributeName: 'createdAt'
+          AttributeType: 'S'
+      KeySchema:
+        - AttributeName: 'operationId'
+          KeyType: 'HASH'
+      GlobalSecondaryIndexes:
+        - IndexName: 'filter_operations_index'
+          KeySchema:
+            - AttributeName: 'type'
+              KeyType: 'HASH'
+            - AttributeName: 'SK'
+              KeyType: 'RANGE'
+          Projection:
+            ProjectionType: 'ALL'
+        - IndexName: 'status-createdAt-index'
+          KeySchema:
+            - AttributeName: 'status'
+              KeyType: 'HASH'
+            - AttributeName: 'createdAt'
+              KeyType: 'RANGE'
+          Projection:
+            ProjectionType: 'ALL'
+        - IndexName: 'status-SK-index'
+          KeySchema:
+            - AttributeName: 'status'
+              KeyType: 'HASH'
+            - AttributeName: 'SK'
+              KeyType: 'RANGE'
+          Projection:
+            ProjectionType: 'ALL'
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+
+  #Create profiles permissions table
+  ProfilesPermissionsTable:
+    Type: 'AWS::DynamoDB::Table'
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub 'backoffice_profiles_permissions_${issuer}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: 'roleId'
+          AttributeType: 'S'
+        - AttributeName: 'profile'
+          AttributeType: 'S'
+      KeySchema:
+        - AttributeName: 'roleId'
+          KeyType: 'HASH'
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      GlobalSecondaryIndexes:
+        - IndexName: 'ProfileIndex'
+          KeySchema:
+          - AttributeName: 'profile'
+            KeyType: 'HASH'
+          Projection:
+            ProjectionType: 'ALL'
+
+
+  # Creates a user pool in cognito for your app to auth against
+  # This example requires MFA and validates the phone number to use as MFA
+  # Other fields can be added to the schema
+  UserPool:
+    Type: "AWS::Cognito::UserPool"
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Retain
+    Properties:
+      UserPoolName: !Sub ${AuthName}-user-pool
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+        # https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pool-settings-message-templates.html
+        InviteMessageTemplate:
+          EmailMessage: !FindInMap [Environments, !Ref envName, NewUserEmailMessage]
+          EmailSubject: !FindInMap [Environments, !Ref envName, NewUserEmailSubject]
+        # UnusedAccountValidityDays: 30
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          RequireUppercase: true
+          TemporaryPasswordValidityDays: 30
+      MfaConfiguration: 'ON'
+      EnabledMfas:
+        - 'SOFTWARE_TOKEN_MFA'
+      AutoVerifiedAttributes:
+        - email
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: 'verified_email'
+            Priority: 1
+      # SmsConfiguration:
+      #   ExternalId: !Sub ${AuthName}-external
+      #   SnsCallerArn: !GetAtt SNSRole.Arn
+      Schema:
+        - Name: name
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+        - Name: roleId
+          AttributeDataType: String
+          Mutable: true
+        - Name: issuer
+          AttributeDataType: String
+          Mutable: false
+        - Name: email
+          AttributeDataType: String
+          Mutable: false
+          Required: true
+        - Name: profile
+          AttributeDataType: String
+          Mutable: true
+          Required: false
+        - Name: picture
+          AttributeDataType: String
+          Mutable: true
+          Required: false
+        - Name: userGroupName
+          AttributeDataType: String
+          Mutable: true
+          Required: false
+        - Name: userGroupDescription
+          AttributeDataType: String
+          Mutable: true
+          Required: false
+        - Name: phoneNumber
+          AttributeDataType: String
+          Mutable: true
+          Required: false
+        - Name: jobTitle
+          AttributeDataType: String
+          Mutable: true
+          Required: false
+  # Creates a User Pool Client to be used by the identity pool
+  UserPoolClient:
+    Type: "AWS::Cognito::UserPoolClient"
+    Properties:
+      ClientName: !Sub ${AuthName}-client
+      GenerateSecret: false
+      UserPoolId: !Ref UserPool
+
+  # Creates a configurations to AVP
+  PolicyStore:
+    Type: AWS::VerifiedPermissions::PolicyStore
+    DependsOn: UserPool
+    Properties:
+      Description: "Policy Store (Manage permissions) for Delta Global Backoffice"
+      ValidationSettings:
+          Mode: STRICT
+
+  AVPIdentitySource:
+    Type: AWS::VerifiedPermissions::IdentitySource
+    DependsOn: PolicyStore
+    Properties:
+      PolicyStoreId: !Ref PolicyStore
+      PrincipalEntityType: !FindInMap [Environments, !Ref envName, GpPrincipalEntityType]
+      Configuration:
+        CognitoUserPoolConfiguration:
+          UserPoolArn: !GetAtt UserPool.Arn
+          GroupConfiguration:
+            GroupEntityType: !FindInMap [Environments, !Ref envName, GpEntityType]
+
+  # Create parameter store to store the user pool id and client id
+  UserPoolIdParameter:
+    Type: "AWS::SSM::Parameter"
+    DependsOn: UserPool
+    Properties:
+      Name: /issuer/deltaglobal/Cognito/UserPoolId
+      Type: "String"
+      Value: !Ref UserPool
+
+  UserPoolClientIdParameter:
+    Type: "AWS::SSM::Parameter"
+    DependsOn: UserPoolClient
+    Properties:
+      Name: /issuer/deltaglobal/Cognito/ClientId
+      Type: "String"
+      Value: !Ref UserPoolClient
+
+  PolicyStoreIdParameter:
+    Type: "AWS::SSM::Parameter"
+    DependsOn: PolicyStore
+    Properties:
+      Name: /issuer/deltaglobal/avp/PolicyStoreId
+      Type: "String"
+      Value: !Ref PolicyStore
+
+Outputs:
+  UserPoolId:
+    Value: !Ref UserPool
+    Export:
+      Name: "UserPoolDeltaGlobal"
+  UserPoolClientId:
+    Value: !Ref UserPoolClient
+    Export:
+      Name: "UserPoolClientIdDeltaGlobal"
+  UserPoolArn:
+    Value: !GetAtt UserPool.Arn
+    Export:
+      Name: "CognitoArnDeltaGlobal"

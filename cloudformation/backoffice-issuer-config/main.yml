@@ -1,0 +1,116 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Backoffice Cognito Stack
+
+Parameters:
+  envName:
+    Type: String
+    AllowedValues: [ dev, homolog, prod ]
+    Default: dev
+
+Conditions:
+  IsProductionEnv:
+    Fn::Equals: [ !Ref envName, "prod" ]
+  DevOrProd:
+    Fn::Or:
+      - Fn::Equals: [ !Ref envName, "dev" ]
+      - Fn::Equals: [ !Ref envName, "prod" ]
+  IsNotProductionEnv:
+    !Not [Condition: IsProductionEnv]
+
+Resources:
+  # BackofficeAsaasStack:
+  #   Type: AWS::CloudFormation::Stack
+  #   Properties:
+  #     Tags:
+  #       - Key: system
+  #         Value: backoffice
+  #       - Key: module
+  #         Value: backoffice
+  #       - Key: pci
+  #         Value: na
+  #     TemplateURL: "asaas-backoffice-template.yml"
+  #     Parameters:
+  #       envName: !Ref envName
+  #       AuthName: backoffice-asaas
+  #       issuer: asaas
+  BackofficeIfoodStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: IsNotProductionEnv
+    Properties:
+      Tags:
+        - Key: system
+          Value: backoffice
+        - Key: module
+          Value: backoffice
+        - Key: pci
+          Value: na
+      TemplateURL: "ifood-backoffice-template.yml"
+      Parameters:
+        envName: !Ref envName
+        AuthName: backoffice-ifood
+        issuer: ifood
+  BackofficeIssuerPosStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: IsProductionEnv
+    Properties:
+      Tags:
+        - Key: system
+          Value: backoffice
+        - Key: module
+          Value: backoffice
+        - Key: pci
+          Value: na
+      TemplateURL: "issuer_pos-backoffice-template.yml"
+      Parameters:
+        envName: !Ref envName
+        AuthName: backoffice-issuer_pos
+        issuer: issuer_pos
+  BackofficeEmaisBankStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: IsProductionEnv
+    Properties:
+      Tags:
+        - Key: system
+          Value: backoffice
+        - Key: module
+          Value: backoffice
+        - Key: pci
+          Value: na
+      TemplateURL: "emaisbank-backoffice-template.yml"
+      Parameters:
+        envName: !Ref envName
+        AuthName: backoffice-emaisbank
+        issuer: emaisbank
+  BackofficeDeltaGlobalBankStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: DevOrProd
+    Properties:
+      Tags:
+        - Key: system
+          Value: backoffice
+        - Key: module
+          Value: backoffice
+        - Key: pci
+          Value: na
+      TemplateURL: "deltaglobal-backoffice-template.yml"
+      Parameters:
+        envName: !Ref envName
+        AuthName: backoffice-deltaglobal
+        issuer: deltaglobal
+  # BackofficeSulcrediStack:
+  #   Type: AWS::CloudFormation::Stack
+  #   Properties:
+  #     Tags:
+  #       - Key: system
+  #         Value: backoffice
+  #       - Key: module
+  #         Value: backoffice
+  #       - Key: pci
+  #         Value: na
+  #     TemplateURL: "sulcredi-backoffice-template.yml"
+  #     Parameters:
+  #       envName: !Ref envName
+  #       AuthName: backoffice-sulcredi
+  #       issuer: sulcredi
